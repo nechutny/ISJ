@@ -1,0 +1,135 @@
+\documentclass[a4paper,12]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage[czech]{babel}
+\usepackage[T1]{fontenc}
+\title{ISJ - Dokumentace}
+\author{Stanislav Nechutný}
+\date{\today}
+\begin{document}
+
+\begin{center}
+	\begin{LARGE}Dokumentace k projektu\end{LARGE}
+
+	\begin{Large}Skriptovací jazyky 2013/2014\end{Large}
+	\\ [6in]
+	
+	Stanislav Nechutný
+	
+	15. května 2014
+\end{center}
+\pagebreak
+
+\part*{Zadání}
+Vytvořte program, který z některé z velkých vícejazyčných databází titulků k filmům, např. http://www.opensubtitles.com, dokáže stahovat nová data, porovnat soubory v rámci jednoho jazyka a vypsat nejpravděpodobnější dvojice odpovídajících si promluv v angličtině a češtině/slovenštině.
+
+Defaultně (bez parametrů) má být vstupem URL souboru s českými titulky. Pokud si chcete s projektem pohrát (a mít lepší hodnocení), můžete přidat parametry pro změnu směru (z angličtiny do češtiny), pro zadávání IMDB identifikátoru filmu, přímo souboru s filmem (program určí velikost a hash), zadání velikosti a hashe ručně atd. Pokud se anglické titulky na serveru nenajdou, měl by to program nahlásit ...
+
+Můžete vybírat vždy nejaktuálnější verze titulků v daném jazyce. Pokud však řešení dovoluje nějak měřit (odhadovat) míru shody a celá operace netrvá minuty, bylo by vhodné vybírat nejlepší překlad ze všech titulků k danému filmu.
+
+Ve výstupu může být některým "promluvám" v jednom jazyce přiřazeno 0 až N promluv v druhém jazyce. To přesně odpovídá příkladu výstupu v adresáři. Na jednom řádku se může objevit několik promluv v angličtině a k nim několik v češtině (třeba 2 ku 3). Promluvy by se neměly opakovat (pokud člověk ve filmu nekoktá).
+
+Program by měl vždy vypsat celou češtinu a celou angličtinu, pokud české promluvě neodpovídá anglická, bude na výstupu:
+$ Cesky \backslash t$
+Pokud je to naopak, pak:
+$\backslash t Anglicky$
+
+\pagebreak
+
+\part*{Upřesnění zadání}
+
+Po průzkumu aplikačního rozhraní serveru opensubtitles.com jsem se rozhodl zaměřit primárně na vyhledávání titulků. Vyhledávání jsem se rozhodl implementovat pomocí následujících způsobů.
+
+1) Název filmu - podle zadaného názvu filmu je provedeno vyhledání filmu a titulků, které obsahuje. V případě, že hledanému názvu (případně části názvu) odpovídá více filmů, tak je uživateli vypsán seznam těchto filmů s rokem vydání a počtem titulků k tomuto filmu a je požádá o zvolení. Pro vyhledání podle tohoto parametru slouží argument -n JMENO.
+
+2) Video soubor - vyhledávání titulků se provede na konkrétní video soubor a tím je i zaručena mnohem lepší shoda promluv, jelikož se jedná o titulky se stejným časováním. Pro použití slouží argument -f SOUBOR.
+
+3) URL titulků - provede se stažení zadaných titulků a k ním se aplikace pokusí vyhledat odpovídající titulky z druhého jazyka. Přepínač -u URL.
+
+4) Specifikace jazyků - je možné specifikovat s jakými jazyky se má pracovat. Tedy pro titulky v jakém jazyce hledat nejvhodnější protimluvy. Tuto hodnotu je možné kombinovat s ostatními a tak je upřesnit. Pro upřesnění slouží -l LANG, kde LANG jsou dva 3 znakové kódy jazyků oddělené čárkou. Ve pokud není přepínač specifikován, tak je výchozí hodnota cze,eng.
+
+5) Ponechat stažené titulky/použít stažené titulky. Tyto přepínače --keep a --downloaded byly implementovány primárně pro testování, aby se aplikace vyhla omezení na počet stažení titulků během testování. Při použití přepínače --keep dojde k zanechání titulků ve složce download/jazyk/ a v případě přepínače --downloaded budou použity titulky z tohoto umístění místo jejich vyhledávání a stahování. V případě přepínače --downloaded jsou pak tedy logicky ignorovány ostatní přepínače sloužící pro vyhledávání.
+
+
+\pagebreak
+
+\part*{Implementace}
+Pro implementaci byl zvolen skriptovací jazyk Python 2.7.5, jelikož byl součástí mnou používané distribuce Fedora 20 a nebylo nutné instalovat další verze, což by mohlo vést k znefunkčnění aplikací závisející na této verzi - zvláště rozdíly ve verzi 2.x a 3.x.
+
+\section*{run.py}
+Hlavní soubor aplikace určený k spouštění. Přebírá argumenty, které byly zmíněny v předchozí kapitole a zařizuje import potřebných modulů a volání jejich funkcí.
+
+\section*{arguments.py}
+Modul třídy arguments, který se stará o naparsování argumentů z sys.argv do struktury a při parsování provádí jejich validaci. V případě neznámého argumentu, špatného formátu jazyků u přepínače -l, nebo chybějící hodnoty pro argumenty -f, -l, -u, -n tiskne chybu na standardní chybový výstup a ukončí běh aplikace s návratovým kodem 1.
+V rámci aplikace je použita 1 instance této třídy a její vytvoření je provedeno jako první. Následně podle získaných hodnot je řízen tok programu.
+
+\section*{api.py}
+Vytvořené programátorské rozhraní pro práci se serverem opensubtitles.com. Hlavními funkcemi jsou:
+
+$subtitlesByLink$ - slouží pro vyhledání titulků podle zadané webové adresy.
+
+$searchByName$ - vyhledání titulků podle zadaného názvu. V případě nalezení několika filmů je uživateli vypsán seznam s názvem filmu, rokem vydání a počtem titulků k příslušnému filmu a je vyzván pro vybrání filmu. To je realizováno za použití funkce $\_\_parseResult$.
+
+$searchByFile$ - vyhledání titulků ke konkrétnímu video souboru. Pro vyhledávání je použita funkce $\_\_hashFile$ a následně provedeno vyhledání. Pro načtení a parsování dat je použita také funkce $\_\_fetchData$ a $\_\_parseResult$.
+
+$downloadSubtitle$ - metoda pro stažení titulků z adresy získané z předchozích dvou funkcí. Funkce kontroluje http hlavičku a pokouší se o detekci, zda nebyl již překročen limit počtu stažení a není požadován opis CAPTCHA kodu. V případě, že k tomu dojde vypise prislusnou chybovou hlasku a konci s navratovym kodem 1. V pripade uspechu jsou titulky ulozeny do adresare download/jazyk-titulku/ID-titulku.zip.
+
+$\_\_parseResult$ - slouží pro parsování získaných dat z webu. Pro získávání dat byl zvolen formát XML, v kterém je možné získávat data, jelikož je pohodlný na zpracování. Pro práci s XML byla zvolena knihovna xml.dom z minidom, která plně postačuje pro dané použití a nabízí pohodlné rozhraní pro práci s DOMem.
+
+$\_\_hashFile$ funkce získaná z http://trac.opensubtitles.org/projects/opensubtitles/
+wiki/HashSourceCodes\#Python pro výpočet hashe podle zadaného názvu souboru.
+
+
+\section*{subtitle.py}
+Třída jejíž jednotlivé instance reprezentují jednotlivé titulky. Při inicializaci získává id a jazyk titulků, podle čehož odvodí cestu ke staženým titulkům. Implementace je tedy nezávislá na způsobu získání titulků.
+
+$unzip$ metoda pro získání konkrétního souboru titulků ze zipu. Pro rozbalování je použita knihovna zipfile, která umožnuje pohodlnější a hlavně bezpečnější práci se zip soubory - je možné s nimi pracovat bez obav o zip explode útok.
+
+Při rozbalování je ze zipu extrahován pouze soubor s příponou .srt, nebo .sub, takže soubory .nfo/.info/.txt a pod. s informacemi o skupině, která uvolnila titulky nejsou rozbalovány. Soubor je následně uložen do adresáře download/jazyk/ s názvem složeném z ID titulků a příponou srt, nebo sub.
+
+$\_\_parse\_subs$ slouží pro parsování obsahu titulků do struktury, nad kterou je následně možné provádět porovnávání a přiřazování odpovídajících protimluv. Samozřejmostí je kontrola, zda soubor existuje a zda data již nebyla jednou načtena. Metoda $parse$ slouží jen jako veřejný alias pro odstínění vnitřní implementace od rozhraní.
+
+Načítání obsahu titulků bylo zkomplikováno o fakt, že jednotlivé jazyky používají často různá kódování a docházelo by k obtížím s vypisováním diakritiky. Pro detekci kódování byla použita knihovna chardet, ve které jsem musel provést několik drobných úprav pro zlepšení přesnosti pro dané použití - zejména u českých titulků docházelo ve valné většině k detekci kódování na ISO-8859-2 místo reálného Windows-1250. Tato upravená verze je přibalena k projektu, aby nedošlo k použití původní neupravené verze, která může být nainstalovaná v systému. Pro zrychlení detekce kódování také není knihovně předáván celý obsah řetězce, ale jen prvních 200 znaků, což se testováním potvrdilo, že pro správnou detekci postačuje a nezpomaluje běh aplikace.
+
+Parsování déle předává načtený a dekódovaný obsah souboru v unicode funkcím $\_\_parse\_subs\_sub$ a $\_\_parse\_subs\_srt$, které volí podle typu souboru. Tyto funkce zajišťují parsování daného formátu souboru srt a sub pomocí regulárních výrazů do listu, kde prvním prvkem je text, druhým čas začátku v sekundách a třetím čas konce v sekundách od začátku filmu. Text je upraven, že místo znaku nového řádku je použit oddělovač | jako je tomu v titulcích formátu sub.
+
+Komplikací u parsování titulků formátu sub se ukázal fakt, že začátek a konec okna titulků je uveden v počtu snímků od začátku filmu. Bohužel není možné zjistit, kolik FPS má konkrétní filmový soubor. Provedl jsem tedy průzkum na filmové sbírce čítající 627 kusů a ukázalo se, že drtivá většina používá 25 snímků za vteřinu, proto jsem tedy použil tuto hodnotu pro přepočet časování sub titulků na vteřiny.
+
+$compare$ metoda pro porovnávání a zarovnání titulků. Porovnávání jsem se rozhodl řešit poměrně jendoduše - posunovat se po obou titulcích a pokud narazím v jednom, nebo druhém na znaky !, nebo ?, tak provést korekci spočívající v maximálním posunu o 7 frází dopředu. V tomto posunu se upravuje proměnná korekce.
+
+Dále se provádí synchronizace v případě, že další text nemá s přihlédnutím k času odpovídající protimluvu v druhých titulcích. To je z důvodu, že v českých titulcích je navíc oproti anglickým i často překlad různých nápisů. Hláška se tedy vypíše a upraví se ukazatel na další.
+
+Prováděl jsem i experimenty s zarovnáním podle znaku "-", který je často uváděn před jednotlivými proslovy pronesenými postavami, ale tento postup způsoboval spíše více problémů, protože nebyl tento formát dodržován.
+
+Dále se neosvědčilo zarovnání pomocí číslic v proslovech, protože často bylo v jednom z jazyků toho číslo napsáno slovně.
+
+
+\pagebreak
+\part*{Použité moduly}
+Pro tvorbu projektu bylo potřeba použít určité moduly, pro zajištění lepší funkčnosti. Mimo klasické importy sys, os, re a urlib2 bylo použito několik dalších o kterých jsem se rozhodl rozepsat.
+
+\section*{minidom}
+Knihovna umožnující pohodlnou práci s XML dokumenty. Pro vytvoření instance byla použita metoda parseString, která převedla řetězec XML do DOM struktury a umožnuje nad ním provádět pohodlné dotazy.
+
+Pro výběr elementů s daty byla použita metoda getElementsByTagName, která umožnuje získat z XML konkrétní elementy a následně přistupovat k jejím atributům a hodnotám.
+
+\section*{chardet}
+Knihovna pro detekci kodování řetězce. Jak jsem se již zmínil v předchozím textu, tak hlavním problémem parsování souborů s titulky byla různá kodování, kdy většina, ale bohužel ne všechny, titulky byly v kodování Windows-1250, naopak k tomu většina českých byla v UTF-8, ruské windows-1252 apod. Sestavovat tabulku obvyklých kodování by bylo obtížné a nepřesné.
+
+Tato knihovna se podle výskytu znaků a jejich významů pokouší detekovat kodování předaného řetězce a vrací určené kodování spolu s pravděpodobností, což je číslo od 0 do 1. 
+
+Bohužel tato knihovna pro české titulky vracela chybně ISO-8859-2 i přesto, že se jednalo o kodování Windows-1250. Provedl jsem proto několik drobných úprav a takto upravenou knihovnu přibalil k projektu.
+
+Detekce kodování je poměrně časově náročná operace a proto jsem experimentálně zjistil, že pro dostatečně přesnou detekci stačí prvních 200 znak. 
+
+\pagebreak
+
+\part*{Závěr}
+Výsledkem je aplikace dle zadání, která navíc implementuje rozšiřující části, jako je vyhledávání titulků podle názvu filmu, nebo podle konkrétního video souboru.
+
+Jelikož s parsováním XML i textových formátů a prací s webovým službami prostřednictvím API mám již poměrně široké zkušenosti, tak projekt nebyl příliš velká význa. Jediný problém byl v použitém jazyce, kdy většina předchozí tvorby byla v jazyce PHP a Python byl pro mě tedy nový - bohužel jsem narazil na spoustu věcí, které jsou řešeny hůře.
+
+
+\end{document}
